@@ -66,6 +66,8 @@ type Options struct {
 	// It must be at least MaxSize. Recommended values are 1 to 3 times MaxSize. By
 	// default it is set to MaxSize * 2.
 	BufSize int
+
+	Buffer []byte
 }
 
 func (opts *Options) setDefaults() {
@@ -118,6 +120,16 @@ func NewChunker(rd io.Reader, opts Options) (*Chunker, error) {
 	smallBits := bits + normalization
 	largeBits := bits - normalization
 
+	var buf []byte
+	if opts.Buffer != nil {
+		buf = opts.Buffer
+		if len(buf) < opts.MaxSize {
+			panic("buffer too small")
+		}
+	} else {
+		buf = make([]byte, opts.BufSize)
+	}
+
 	chunker := &Chunker{
 		minSize:  opts.MinSize,
 		maxSize:  opts.MaxSize,
@@ -125,8 +137,8 @@ func NewChunker(rd io.Reader, opts Options) (*Chunker, error) {
 		maskS:    (1 << smallBits) - 1,
 		maskL:    (1 << largeBits) - 1,
 		rd:       rd,
-		buf:      make([]byte, opts.BufSize),
-		cursor:   opts.BufSize,
+		buf:      buf,
+		cursor:   len(buf),
 	}
 
 	return chunker, nil

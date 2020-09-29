@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"sync"
 	"testing"
 )
 
@@ -231,4 +232,62 @@ func randBytes(n int, seed int64) []byte {
 		log.Fatal(err)
 	}
 	return b
+}
+
+func TestBufferPool(t *testing.T) {
+	bufSize := 1024 * 8
+	bufPool := sync.Pool{
+		New: func() interface{} {
+			return make([]byte, bufSize)
+		},
+	}
+
+	sem := make(chan struct{}, 8)
+	for i := 0; i < 1024; i++ {
+		sem <- struct{}{}
+		go func() {
+			defer func() {
+				<-sem
+			}()
+
+			data := randBytes(1e6, 63)
+			opts := defaultOpts
+			opts.Buffer = bufPool.Get().([]byte)
+			defer func() {
+				bufPool.Put(opts.Buffer)
+			}()
+			chunker, err := NewChunker(bytes.NewReader(data), opts)
+			assertNoError(t, err)
+
+			var prevOffset int
+			var prevLength int
+			allData := make([]byte, 0)
+			for i := 0; ; i++ {
+				chunk, err := chunker.Next()
+				if err == io.EOF {
+					break
+				}
+				assertNoError(t, err)
+
+				offset := prevOffset + prevLength
+				if offset != chunk.Offset {
+					t.Errorf("chunk %d: Offset should be %d not %d", i, offset, chunk.Offset)
+				}
+				if chunk.Length != len(chunk.Data) {
+					t.Errorf("chunk %d: Length %d does not match len(Data) %d", i, chunk.Length, len(chunk.Data))
+				}
+
+				allData = append(allData, chunk.Data...)
+
+				prevOffset = chunk.Offset
+				prevLength = chunk.Length
+			}
+			if !bytes.Equal(allData, data) {
+				t.Error("data does not match")
+			}
+		}()
+	}
+	for i := 0; i < cap(sem); i++ {
+		sem <- struct{}{}
+	}
 }
