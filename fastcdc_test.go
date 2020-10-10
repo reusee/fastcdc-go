@@ -238,7 +238,8 @@ func TestBufferPool(t *testing.T) {
 	bufSize := 1024 * 8
 	bufPool := sync.Pool{
 		New: func() interface{} {
-			return make([]byte, bufSize)
+			bs := make([]byte, bufSize)
+			return &bs
 		},
 	}
 
@@ -252,9 +253,9 @@ func TestBufferPool(t *testing.T) {
 
 			data := randBytes(1e6, 63)
 			opts := defaultOpts
-			opts.Buffer = bufPool.Get().([]byte)
+			opts.Buffer = *bufPool.Get().(*[]byte)
 			defer func() {
-				bufPool.Put(opts.Buffer)
+				bufPool.Put(&opts.Buffer)
 			}()
 			chunker, err := NewChunker(bytes.NewReader(data), opts)
 			assertNoError(t, err)
