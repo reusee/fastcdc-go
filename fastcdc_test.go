@@ -244,7 +244,7 @@ func TestBufferPool(t *testing.T) {
 	}
 
 	sem := make(chan struct{}, 8)
-	for i := 0; i < 1024; i++ {
+	for i := 0; i < 32; i++ {
 		sem <- struct{}{}
 		go func() {
 			defer func() {

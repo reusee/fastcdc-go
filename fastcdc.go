@@ -28,6 +28,8 @@ type Chunker struct {
 
 	rd io.Reader
 
+	table *[256]uint64
+
 	buf    []byte
 	cursor int
 	offset int
@@ -108,8 +110,13 @@ func NewChunker(rd io.Reader, opts Options) (*Chunker, error) {
 		return nil, err
 	}
 
-	for i := 0; i < len(table); i++ {
-		table[i] = table[i] ^ opts.Seed
+	tablePtr := &table
+	if opts.Seed != 0 {
+		t := table // copy
+		for i := 0; i < len(t); i++ {
+			t[i] = t[i] ^ opts.Seed
+		}
+		tablePtr = &t
 	}
 
 	normalization := opts.Normalization
@@ -136,6 +143,7 @@ func NewChunker(rd io.Reader, opts Options) (*Chunker, error) {
 		normSize: opts.AverageSize,
 		maskS:    (1 << smallBits) - 1,
 		maskL:    (1 << largeBits) - 1,
+		table:    tablePtr,
 		rd:       rd,
 		buf:      buf,
 		cursor:   len(buf),
@@ -206,14 +214,14 @@ func (c *Chunker) nextChunk(data []byte) (int, uint64) {
 	n := min(len(data), c.maxSize)
 
 	for ; i < min(n, c.normSize); i++ {
-		fp = (fp << 1) + table[data[i]]
+		fp = (fp << 1) + c.table[data[i]]
 		if (fp & c.maskS) == 0 {
 			return i + 1, fp
 		}
 	}
 
 	for ; i < n; i++ {
-		fp = (fp << 1) + table[data[i]]
+		fp = (fp << 1) + c.table[data[i]]
 		if (fp & c.maskL) == 0 {
 			return i + 1, fp
 		}
